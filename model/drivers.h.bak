@@ -1,0 +1,78 @@
+#ifndef DRIVERS_H
+#define DRIVERS_H
+
+#include "model/car.h"
+#include "model/cars.h"
+#include "model/autoparks.h"
+#include "model/drivernode.h"
+#include <QList>
+#include <QTimer>
+#include <QProgressDialog>
+
+class Drivers : public IRequest
+{
+    Q_OBJECT
+private:
+    QList<Driver *> m_drivers;
+    QList <Driver*> removeDrivers;
+    int m_id_autopark = -1;
+    int m_tab_index = -1;
+    QTimer * timerWork;
+    QDate selectedDate;
+
+    void setDriversReplace();
+
+    Driver * _driver;
+
+    bool stateUpdate = false;
+
+    bool stateAutoparksDriver = false;
+    bool stateAutoparksDriverInfo = false;
+    QList<Driver *> listDrivers;
+
+public:
+    explicit Drivers(int tab_index, bool start_timer, QObject *parent = 0);
+    void setAutoPark(int id_autopark) { m_id_autopark = id_autopark; }
+    Driver * contains(Driver * a_driver)    const;
+    Driver * contains(quint64 id)    const;
+    void add(Driver * driver);
+    void remove(Driver * driver);
+    void getDrivers(QList<Driver *> & a_drivers);
+    void getDrivers(Driver::TypeGroupDrivers type, QList<Driver *> & a_drivers);
+    void getAttachedDrivers(QList<Driver *> & a_drivers);
+    int count()    const;
+//    void Select(bool is_high = true);
+    void SelectSpoofing(bool is_high = true);
+    void InsertSpoofing(quint64 id_auto, int id_park, bool is_high = true);
+//    void SelectData(bool is_high = true);
+    void SelectMonth(const QDate &date, bool is_high = true);
+    void SelectNodes(bool is_high = true);
+    void setCars(Cars * cars, const QDate &date, bool is_high = true);
+    void setResponse(QByteArray response, Request::Command cmd);
+    void compare(Drivers * udrivers);
+    void clear();
+    ~Drivers();
+
+    void SelectParkDrivers();
+
+public slots:
+    void SelectData(bool is_high = true);
+    void Select(bool is_high = true);
+
+signals:
+    void complete();
+    void completeSetCars();
+    void completeSelectMonth();
+    void completeSelectData();
+    void dataChanged(Driver::TypePropery type, QVariant data);
+    void signalInsertSubstitution(Driver * driver);
+    void signalSortSequenceDrivers();
+
+    void signalEndDownload();
+    void signalEndDownloadInfo();
+    void removeDriver(Driver * driver);
+
+    void signalUpdate(); // сигнал обновления
+};
+
+#endif // DRIVERS_H

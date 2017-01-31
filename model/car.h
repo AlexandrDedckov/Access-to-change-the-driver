@@ -1,0 +1,550 @@
+#ifndef CAR_H
+#define CAR_H
+
+#include <QObject>
+#include <QTime>
+#include <QMap>
+#include <QDate>
+#include <QDebug>
+#include "txt_constants.h"
+#include "model/icollectionrequest.h"
+#include "model/request/request.h"
+
+const QString H24= "24";
+const QString H16= "16";
+const QString H12D= "12д";
+const QString H12N= "12н";
+const QString H_OUTPUT = TXT_OUTPUT;
+
+enum Hours
+{
+    hOther = 0,
+    hOutput = 1,
+    h24 = 2,
+    // добавлены переменные для 16,12д и 12н рабочие дни
+    h16 = 3,
+    h12d = 4,
+    h12n = 5
+};
+
+enum StateDriver
+{
+    stateNoSet = 0,
+    stateTruancy = 1,
+    stateWent = 2,
+    stateNotGetThrough = 3,
+    stateExtraChange = 4
+};
+
+class Driver;
+
+class DayValue : public QObject
+{
+    Q_OBJECT
+public:
+    explicit DayValue(QObject *parent = 0) :
+        QObject(parent),
+        hours(hOther),
+        state(stateNoSet),
+        notify(false),
+        node(""),
+        id(0),
+        status(-1)
+    { }
+
+    bool compare(DayValue * dv)
+    {
+        bool t_state = false;
+        if(hours != dv->hours)
+        {
+            hours = dv->hours;
+            t_state = true;
+        }
+        if(notify != dv->notify)
+        {
+            notify = dv->notify;
+            t_state = true;
+        }
+        if(state != dv->state)
+        {
+            state = dv->state;
+            t_state = true;
+        }
+        if(node != dv->node)
+        {
+            node = dv->node;
+            t_state = true;
+        }
+        if(id_driver_replaced != dv->id_driver_replaced)
+        {
+            id_driver_replaced = dv->id_driver_replaced;
+            t_state = true;
+        }
+        if(id_driver_replaceable != dv->id_driver_replaceable)
+        {
+            id_driver_replaceable = dv->id_driver_replaceable;
+            t_state = true;
+        }
+        if(id != dv->id)
+        {
+            id = dv->id;
+            t_state = true;
+        }
+        if(status != dv->status)
+        {
+            id = dv->status;
+            t_state = true;
+        }
+        return t_state;
+    }
+
+    DayValue * clone(QObject *parent)
+    {
+        DayValue * dv = new DayValue(parent);
+        dv->hours = hours;
+        dv->notify = notify;
+        dv->state = state;
+        dv->node = node;
+        dv->id_driver_replaced = id_driver_replaced;
+        dv->id_driver_replaceable = id_driver_replaceable;
+        dv->id = id;
+        dv->status = status;
+        return dv;
+    }
+
+    Hours hours;
+    StateDriver state;
+    bool notify;
+    QString node;
+    quint64 id;
+    int status;
+
+    quint64 id_driver_replaced = 0;     //id замененный
+    quint64 id_driver_replaceable = 0;  //id заменяемый
+    Driver * driver_replaced = NULL;       //замененный, втом случае если мы хотим установить другого водителя на этот день
+    Driver * driver_replaceable = NULL;    //заменяемый, втом случае если мы установили водителя на этот день на другой автомобиль,
+                                           //подмененного водителя записываем в это поле
+};
+
+class OtherDV : public QObject
+{
+    Q_OBJECT
+public:
+    explicit OtherDV(QObject *parent = 0) :
+        QObject(parent)
+    {}
+    QDate date;
+    DayValue * dv = NULL;
+};
+
+class Month : public IRequest
+{
+    Q_OBJECT
+private:
+    quint64 m_id_driver;
+    int m_id_park;
+    QMap<quint8, DayValue*> m_schedule;
+    //QDate * m_currentDateMonth = NULL;
+    QTime * m_timeChangeDriver;
+
+    OtherDV * lastDayPreviousMonth = NULL;
+    OtherDV * firstDayNextMonth = NULL;
+
+    void sendDayValue(quint8 day, DayValue * dv, DayValue * lastDv, Request::Command cmd = Request::MonthSetDayValue);
+    DayValue* nowDayValue();
+
+public:
+    explicit Month(QObject *parent = 0);
+    ~Month()                                    {  emit objRemove();                            }
+    bool IsWork(quint8 day);
+    bool IsWork();
+    bool IsTruancy();
+    bool IsReplaced();
+
+    void addScheduleValue(quint8 day, Hours hours, StateDriver state, const QString & node,
+                          bool notify, quint64 id_replaced, quint64 id_replaceable, quint64 id);
+    void editScheduleValue(quint8 day, Hours hours);
+    void setDriverReplaced(quint8 day, Driver * driver_replaceable);
+    void setDriverReplaceable(quint8 day, Driver * driver_replaced);
+    void removeTheReplacement(quint8 day);
+    void setNotify(quint8 day, bool notify);
+    void editStateDriverValue(quint8 day, StateDriver state);
+    int getCountDays();
+    QMap<quint8, DayValue*> * getSchedule()      {  return &m_schedule;                         }
+    DayValue* getDayValue(quint8 day);
+    Driver * getCurrentDriver()                  {  return qobject_cast<Driver *>(parent());    }
+    quint64 getIdDriver()                        {  return m_id_driver;                         }
+    OtherDV * getLastDayPreviousMonth()          {  return lastDayPreviousMonth;                }
+    OtherDV * getFirstDayNextMonth()             {  return firstDayNextMonth;                   }
+    int countTruancy();
+
+    void setAutoPark(int id_park)                {  this->m_id_park = id_park;                  }
+    void setIdDriver(quint64 id)                 {  m_id_driver = id;                           }
+    //void setCurrentDateMonth(QDate * date)       {  m_currentDateMonth = date;                  }
+    void setTimeChangeDriver(QTime * time)       {  m_timeChangeDriver = time;                  }
+    void setLastDayPreviousMonth(QDate date, Hours hours, StateDriver state, const QString & node, bool notify, quint64 id_replaced, quint64 id_replaceable);
+    void setFirstDayNextMonth(QDate date, Hours hours, StateDriver state, const QString & node, bool notify, quint64 id_replaced, quint64 id_replaceable);
+    void compare(Month * umonth);
+
+    void undo(Request::Command cmd, QVariant data);
+    void setResponse(QByteArray response, Request::Command cmd);
+
+    void clear();
+signals:
+    void dataChanged(quint8 day, DayValue * dv);
+};
+
+class Car;
+
+class Driver : public IRequest
+{
+    Q_OBJECT
+public:
+    enum TypeGroupDrivers
+    {
+        DriversNotSet = 0,
+        DriversHoliday = 1,
+        DriversIll = 2,
+        DriversUndefinedSchedule = 3,
+        DriversPrivateTraders = 4,
+        DriversNotContacted = 5,
+        DriversLease = 6 // раскат и лизинг, нет отдельной графы
+    };
+
+private:
+    quint64 m_id;
+    quint64 m_id_car = 0;
+    int m_id_park;
+    QString m_fio;
+    QString m_phone;
+    Driver::TypeGroupDrivers m_type = DriversNotSet;
+    QString m_schedule;
+    QString m_NotResponding;
+    QString m_Sequence;
+    QString m_Sleep;
+    QString m_Intercession;
+    QTime * m_timeChangeDriver;
+    Month * m_month;
+    Car * m_currentCar = NULL;
+    QDate * m_currentDateMonth;
+    QDate m_currentDateMonth2;
+    bool isWork;
+    int m_tab_index = -1;
+
+
+    QString _year;
+    QString _month;
+public:
+    enum TypePropery
+    {
+        ProperyFIO = 0,
+        ProperyPhone = 1,
+        ProperySchedule = 2,
+        ProperyCountNodes = 3,
+        ProperyState = 4,
+        ProperyTypeGroup = 5,
+        ProperyNotResponding = 6,
+        ProperySleep = 7,        
+        ProperySequence = 8,
+        ProperyIntercession = 9,
+        ProperyCountTruancy
+    };
+
+    explicit Driver(int tab_index, QObject *parent = 0):
+        IRequest(parent),
+        m_id_car(0),
+        m_tab_index(tab_index)
+    {
+        m_month = new Month(this);
+        m_currentCar = NULL;
+    }
+
+    ~Driver()
+    {
+        emit objRemove();
+        /*if(m_month != NULL)
+            delete m_month;*/
+    }
+
+    bool IsWork(quint8 day);
+    bool IsWork();
+    bool IsSetWork()                            { return isWork;                           }
+    void setId(quint64 id)                      { m_id = id; m_month->setIdDriver(id);     }
+    void setFIO(const QString & fio);
+    void setPhone(const QString & phone);
+    void setSchedule(const QString & schedule, bool is_send = true);
+    void setNotResponding(const QString & notResponding);
+    void setSequence(QString sequence);
+    void setSleep(const QString & sleep);
+    void setIntercession(const QString & comment);
+    void setAutoDayNextMonth();
+    void setCar(Car * car, bool is_send = true);
+    void attachCar(Car * car);
+    void setAutoPark(int id_park)
+    {
+        this->m_id_park = id_park;
+        m_month->setAutoPark(m_id_park);
+    }
+    void setIdCar(quint64 id_car)               { this->m_id_car = id_car;                  }
+    void setIsWork(bool value)                  { isWork = value;                           }
+    void setWork(bool value, bool is_send);
+    void setTimeChangeDriver(QTime * time)
+    {
+        if(m_month != NULL)
+            m_month->setTimeChangeDriver(time);
+        m_timeChangeDriver = time;
+    }
+    void setCurrentDateMonth(QDate * date)
+    {
+        m_currentDateMonth = date;
+    }
+
+    void setCurrentDateMonth2(QDate date)
+    {
+        m_currentDateMonth2 = date;
+    }
+
+    void setUpdateSubstitution(qint64 id_old_driver, int id_park, quint64 id_new_driver);
+    void setState(Driver::TypeGroupDrivers type);
+    void compare(Driver * driver);
+    void setDeleteSubstitution();
+
+
+
+    Driver * clone(QObject *parent);
+
+    quint64 getId()                             { return m_id;                              }
+    QString getFIO()                            { return m_fio;                             }
+    QString getPhone()                          { return m_phone;                           }
+    QString getSchedule()                       { return m_schedule;                        }
+    QString getNotResponding()                  { return m_NotResponding;                   }
+    QString getSequence()                       { return m_Sequence;                        }
+    QString getSleep()                          { return m_Sleep;                           }
+    QString getIntercession()                   { return m_Intercession;                    }
+    Month * getMonth()                          { return m_month;                           }
+    int getCountDays()                          { return m_currentCar != NULL ?
+                                                            m_currentDateMonth->daysInMonth() :
+                                                            m_currentDateMonth2.daysInMonth(); }
+    Car * getCar()                              { return m_currentCar;                      }
+    quint64 getIdCar()                          { return m_id_car;                          }
+    int getAutoPark()                           { return m_id_park;                         }
+    Driver::TypeGroupDrivers getState()         { return m_type;                            }
+    quint8 getCountTruancy();
+    QString toString()                          { return m_fio + m_phone;                   }
+    QDate getCurrentDateMonth()                 { return m_currentCar != NULL ?
+                                                            *m_currentDateMonth :
+                                                            m_currentDateMonth2; }
+
+    void refreshState()                         { emit dataChanged(Driver::ProperyState, isWork); }
+    void SelectMonth();
+
+    void setResponse(QByteArray response, Request::Command cmd);
+
+signals:
+    void dataChanged(Driver::TypePropery type, QVariant data);
+
+public slots:
+
+};
+
+class Car : public IRequest
+{
+    Q_OBJECT
+private:
+    quint64 m_id;
+    QString m_name;
+    QString m_number;
+    QTime m_timeChangeDriver;
+    QDate m_currentDateMonth;
+    QList<Driver *> m_drivers;
+    QList<Driver *> m_drivers_copy;
+    bool isRepair = false;
+    bool isLease = false;//29.09
+    int m_id_park;
+
+public:
+    int maxDrivers = 4;
+    enum TypePropery
+    {
+        ProperyName = 0,
+        ProperyNumber = 1,
+        ProperyTimeChangeDriver = 2,
+        ProperyDrivers = 3,
+        ProperyRepair = 4,
+        ProperyLease = 5 // принадлежность раскату
+    };
+    //bool IsSetDriverWork = false;
+
+    explicit Car(QObject *parent = 0) : IRequest(parent) { }
+    ~Car()
+    {
+        emit objRemove();
+        /*foreach (Driver * driver, m_drivers)
+            delete driver;
+        m_drivers.clear();*/
+    }
+    void setId(quint64 id)                      { m_id = id;                                }
+    void setName(const QString & name);
+    void setNumber(const QString & number);
+    void setTimeChangeDriver(const QTime & time);
+    void setCurrentDateMonth(const QDate & date){ m_currentDateMonth = date;                }
+    void setRepair(bool repair);
+    void setLease(bool lease); // ввод раската
+    void setAutoPark(int id_park)               { this->m_id_park = id_park;                }
+    void addDrivers(QList<Driver *> drivers)
+    {
+        QList<Driver *> driversCar;
+        this->getDivers(driversCar);
+
+        if (driversCar.count())
+        {
+            QList<Driver *> bufDriversCar = driversCar;
+            for (Driver * driver : drivers)
+            {
+                if (!driversCar.contains(driver))
+                    addDriver(driver);
+                else
+                    bufDriversCar.removeAll(driver);
+            }
+
+            for (Driver * driver : bufDriversCar)
+                removeDriver(driver);
+
+            emit dataChanged(ProperyDrivers, "");
+            return;
+        }
+
+        for (Driver * driver : drivers)
+        {
+            if (!driver)
+                continue;
+            driver->setCar(this, false);
+
+            driver->setCurrentDateMonth(&m_currentDateMonth);
+            driver->setTimeChangeDriver(&m_timeChangeDriver);
+            this->m_drivers.append(driver);
+            emit dataChanged(ProperyDrivers, "");
+        }
+    }
+
+    void addDriver(Driver * driver, bool is_select = true)
+    {
+        if(driver == NULL)
+            return;
+
+        if (m_drivers.contains(driver))
+        {
+            m_drivers_copy.removeAll(driver);
+            return;
+        }
+
+        if(is_select)
+            driver->setCar(this, false);
+        else
+            driver->attachCar(this);
+        driver->setCurrentDateMonth(&m_currentDateMonth);
+        driver->setTimeChangeDriver(&m_timeChangeDriver);
+        this->m_drivers.append(driver);
+        emit dataChanged(ProperyDrivers, "");
+        //driver->SelectMonth();
+    }
+
+    void removeDriver(Driver * driver)
+    {
+        if(m_drivers.contains(driver))
+        {
+            this->m_drivers.removeAll(driver);
+            driver->setCar(NULL, false);
+            emit dataChanged(ProperyDrivers, "");
+        }
+    }
+
+    void StartUpdateCar()
+    {
+        m_drivers_copy = m_drivers;
+    }
+
+    void FinishUpdateCar()
+    {
+        for(Driver * driver : m_drivers_copy)
+        {
+            qDebug() << "[REMOVE DRIVER FROM CAR]" << m_id << m_id_park;
+            removeDriver(driver);
+        }
+    }
+
+    bool containsDriver(Driver * driver)        { return m_drivers.contains(driver);        }
+    void compare(Car * car);
+    Car * clone(QObject *parent);
+
+    bool IsSetWork();
+    quint64 getId()                             { return m_id;                              }
+    void emitRefresh(Driver * driver)           { emit removeDriverWidgetInCar(driver);     }
+    void emitRefreshCar()                       { emit dataChanged(ProperyDrivers, "");     }
+
+    static bool compareDrivers(Driver *driver_1, Driver * driver_2)
+    {
+        if (driver_1->getSequence().isEmpty())
+            return true;
+        if (driver_2->getSequence().isEmpty())
+            return false;
+
+        if (driver_1->getSequence().toInt() <  driver_2->getSequence().toInt())
+            return true;
+        else
+            return false;
+    }
+
+    void getDivers(QList<Driver *> & drivers)
+    {
+        for (Driver* driver : m_drivers)
+        {
+            if (this->getId() != driver->getIdCar())
+                m_drivers.removeAll(driver);
+        }
+
+        qSort(m_drivers.begin(), m_drivers.end(), compareDrivers);
+        drivers = m_drivers;
+    }
+
+    int countDivers()                           { return m_drivers.count();                 }
+    int lastValue();
+    QString getName()                           { return m_name;                            }
+    QString getNumber()                         { return m_number;                          }
+    QTime getTimeChangeDriver()                 { return m_timeChangeDriver;                }
+    QDate getCurrentDateMonth()                 { return m_currentDateMonth;                }
+    int getCountDays()                          { return m_currentDateMonth.daysInMonth();  }
+    bool getRepair()                            { return isRepair;                          }
+    bool getLease()                             { return isLease;                           } // вывод раската
+    QString toString()                          { return m_name.trimmed()
+                                                         + m_number.trimmed();              }
+    int getAutopark()                           { return m_id_park;                         }
+
+    void setResponse(QByteArray response, Request::Command cmd);
+
+    QList<Driver *> sort(QList<Driver *> drivers)
+    {
+        Driver * _driver;
+
+        for (int i = drivers.count() - 1; i >= 0; i--)
+            for (int j = 0; j < i; j++)
+            {
+                if (drivers[j]->getSequence().toInt() > drivers[j+1]->getSequence().toInt())
+                {
+                    _driver = drivers[j];
+                    drivers[j] = drivers[j + 1];
+                    drivers[j + 1] = _driver;
+                }
+            }
+        return drivers;
+    }
+
+signals:
+    void dataChanged(Car::TypePropery type, QVariant data);
+    void removeDriverWidgetInCar(Driver * driver);
+
+public slots:
+
+};
+
+#endif // CAR_H
