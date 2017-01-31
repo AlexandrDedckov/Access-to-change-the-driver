@@ -15,5 +15,3 @@
 * php5
 * OpenServer 5.5 и выше
 * Qt5.5 и выше >
-
-[Александр](../../../../AlexandrDedckov @github/AlexandrDedckov)
